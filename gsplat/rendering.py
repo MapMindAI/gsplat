@@ -229,6 +229,40 @@ def _resolve_tile_size(
     return 16
 
 
+class _MaskedOpacities(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, opacities: Tensor, masks: Tensor) -> Tensor:
+        ctx.save_for_backward(opacities, masks)
+        return torch.where(masks > 0.5, opacities, -opacities)
+
+    @staticmethod
+    def backward(ctx, v_signed: Tensor) -> Tuple[Tensor, Tensor]:
+        opacities, masks = ctx.saved_tensors
+        return v_signed * masks, v_signed * opacities
+
+
+def masked_opacities(opacities: Tensor, masks: Tensor) -> Tensor:
+    """Opacities for `rasterization` with each Gaussian whose mask is 0 masked
+    out, as in MaskGaussian (https://arxiv.org/abs/2412.20522).
+
+    A masked Gaussian is passed as its negated opacity: the 3DGS rasterizer
+    culls it by its absolute opacity but blends it with alpha 0, so it renders
+    nothing, and its backward pass still returns the gradient of its alpha
+    at 0. That reaches `masks` as if the mask scaled alpha, so a masked
+    Gaussian can learn to come back. Only the screen-space 3DGS path
+    (``with_eval3d=False``) honours it.
+
+    Args:
+        opacities: Gaussian opacities in [0, 1]. [..., N]
+        masks: 1 to render a Gaussian, 0 to mask it, typically a straight-through
+            sample of a learned probability. [..., N]
+
+    Returns:
+        Signed opacities. [..., N]
+    """
+    return _MaskedOpacities.apply(opacities, masks.to(opacities.dtype))
+
+
 @trace_function("render")
 @capture_inputs(envvar="GSPLAT_INPUT_CAPTURE_RASTERIZATION")
 def rasterization(
@@ -287,6 +321,7 @@ def rasterization(
         int
     ] = None,  # Currently only None or 3 is accepted.
     renderer_config: Optional[RendererConfig] = None,
+    gaussian_masks: Optional[Tensor] = None,  # [..., N]
 ) -> Tuple[Tensor, Tensor, Dict]:
     """Rasterize a set of 3D Gaussians (N) to a batch of image planes (C).
 
@@ -483,6 +518,8 @@ def rasterization(
             :class:`RendererConfig_MixedBatch`, which uses the existing mixed-batch
             rasterizer implementation. Non-default configs require
             ``with_eval3d=True``.
+        gaussian_masks: 1 to render a Gaussian, 0 to mask it out while it still
+            gets a mask gradient; see :func:`masked_opacities`. [..., N]. Default is None.
 
     Returns:
         A tuple:
@@ -524,6 +561,8 @@ def rasterization(
 
     """
     has_color = render_mode_has_color(render_mode)
+    if gaussian_masks is not None:
+        opacities = masked_opacities(opacities, gaussian_masks)
 
     external_distortion_coeffs = cast(
         Optional[BivariateWindshieldModelParameters], external_distortion_coeffs

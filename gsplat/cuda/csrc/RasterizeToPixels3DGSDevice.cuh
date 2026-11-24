@@ -34,6 +34,11 @@ namespace gsplat
 // MAX_ALPHA), and whether the sample contributes. `valid == false` means the
 // caller skips this gaussian (negative exponent or sub-threshold alpha). `vis`
 // (== exp(-sigma)) is retained for the backward pass, which needs it directly.
+//
+// A negative opacity marks a masked gaussian (MaskGaussian, arXiv 2412.20522):
+// it passes the threshold on |opacity| but blends with alpha 0, so it renders
+// nothing yet still gets the opacity gradient it would have at alpha 0, which
+// the caller turns into its mask gradient.
 struct GaussianWeight
 {
     float vis;   // __expf(-sigma)
@@ -46,11 +51,11 @@ __device__ __forceinline__ GaussianWeight
 {
     const float sigma = 0.5f * (conic.x * dx * dx + conic.z * dy * dy) + conic.y * dx * dy;
     const float vis   = __expf(-sigma);
-    const float alpha = min(MAX_ALPHA, opac * vis);
+    const float alpha = min(MAX_ALPHA, fmaxf(opac, 0.f) * vis);
     GaussianWeight out;
     out.vis   = vis;
     out.alpha = alpha;
-    out.valid = !(sigma < 0.f || alpha < ALPHA_THRESHOLD);
+    out.valid = !(sigma < 0.f || fabsf(opac) * vis < ALPHA_THRESHOLD);
     return out;
 }
 
@@ -152,9 +157,9 @@ __device__ __forceinline__ void rasterize_to_pixels_3dgs_blend_bwd(
         }
         v_alpha += -T_final * ra * accum;
     }
-    if(opac * vis <= MAX_ALPHA)
+    if(fabsf(opac) * vis <= MAX_ALPHA)
     {
-        const float v_sigma = -opac * vis * v_alpha;
+        const float v_sigma = -fmaxf(opac, 0.f) * vis * v_alpha;
         v_conic_local
             = {0.5f * v_sigma * delta.x * delta.x, v_sigma * delta.x * delta.y, 0.5f * v_sigma * delta.y * delta.y};
         v_xy_local

@@ -299,7 +299,7 @@ __global__ void intersect_tile_kernel(
 
         // Opacity-aware isocontour level: alpha = opacity * exp(-0.5 * q) >= ALPHA_THRESHOLD
         // => q <= 2 * ln(opacity / ALPHA_THRESHOLD). Cap at GAUSSIAN_EXTEND^2 (same as the gsplat radius budget).
-        const float opacity = opacities[idx];
+        const float opacity = fabsf(opacities[idx]); // Negative marks a masked gaussian.
         float t             = fminf(GAUSSIAN_EXTEND * GAUSSIAN_EXTEND, 2.0f * __logf(opacity / ALPHA_THRESHOLD));
 
         // SNUGBOX: tight axis-aligned bounding box of the ellipse
