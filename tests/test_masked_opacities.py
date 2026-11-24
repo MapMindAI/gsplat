@@ -54,12 +54,10 @@ def reference(means2d, conics, depths, opacities, colors, masks):
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="No CUDA device")
 def test_masked_gaussians_render_nothing():
-    from gsplat import masked_opacities
-
     means, quats, scales, opacities, colors, masks, viewmats, Ks = scene()
     kept = masks > 0.5
 
-    masked, _ = render(means, quats, scales, masked_opacities(opacities, masks), colors, viewmats, Ks)
+    masked, _ = render(means, quats, scales, opacities, colors, viewmats, Ks, gaussian_masks=masks)
     removed, _ = render(
         means[kept], quats[kept], scales[kept], opacities[kept], colors[kept], viewmats, Ks
     )

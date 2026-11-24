@@ -38,7 +38,8 @@ namespace gsplat
 // A negative opacity marks a masked gaussian (MaskGaussian, arXiv 2412.20522):
 // it passes the threshold on |opacity| but blends with alpha 0, so it renders
 // nothing yet still gets the opacity gradient it would have at alpha 0, which
-// the caller turns into its mask gradient.
+// the caller turns into its mask gradient. Kernels that count or list
+// contributing gaussians count it too, as it is still in the scene.
 struct GaussianWeight
 {
     float vis;   // __expf(-sigma)
