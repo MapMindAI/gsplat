@@ -259,9 +259,9 @@ __global__ void rasterize_to_pixels_3dgs_bwd_kernel(
                     v_alpha += -T_final * ra * accum;
                 }
 
-                if(opac * vis <= MAX_ALPHA)
+                if(fabsf(opac) * vis <= MAX_ALPHA)
                 {
-                    const float v_sigma = -opac * vis * v_alpha;
+                    const float v_sigma = -fmaxf(opac, 0.f) * vis * v_alpha;
                     v_conic_local
                         = {0.5f * v_sigma * delta.x * delta.x,
                            v_sigma * delta.x * delta.y,

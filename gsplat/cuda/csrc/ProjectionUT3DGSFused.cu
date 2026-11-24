@@ -188,7 +188,7 @@ __global__ void
     // therefore a compromise between performance and quality, which is still reasonable for most cases.
     if(opacities != nullptr)
     {
-        float opacity  = opacities[bid * N + gid];
+        float opacity  = fabsf(opacities[bid * N + gid]); // Negative marks a masked gaussian.
         opacity       *= compensation;
         if(opacity < ALPHA_THRESHOLD)
         {

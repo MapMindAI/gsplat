@@ -179,7 +179,7 @@ __global__ void projection_ewa_3dgs_packed_fwd_kernel(
         float extend = GAUSSIAN_EXTEND;
         if(opacities != nullptr)
         {
-            float opacity = opacities[bid * N + gid];
+            float opacity = fabsf(opacities[bid * N + gid]); // Negative marks a masked gaussian.
             if(compensations != nullptr)
             {
                 // we assume compensation term will be applied later on.

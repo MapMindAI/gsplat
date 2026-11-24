@@ -287,6 +287,7 @@ def rasterization(
         int
     ] = None,  # Currently only None or 3 is accepted.
     renderer_config: Optional[RendererConfig] = None,
+    gaussian_masks: Optional[Tensor] = None,  # [..., N]
 ) -> Tuple[Tensor, Tensor, Dict]:
     """Rasterize a set of 3D Gaussians (N) to a batch of image planes (C).
 
@@ -483,6 +484,14 @@ def rasterization(
             :class:`RendererConfig_MixedBatch`, which uses the existing mixed-batch
             rasterizer implementation. Non-default configs require
             ``with_eval3d=True``.
+        gaussian_masks: 1 to render a Gaussian, 0 to mask it out, as in MaskGaussian
+            (https://arxiv.org/abs/2412.20522); typically a straight-through sample
+            of a learned probability. A masked Gaussian is passed to the kernels as
+            its negated opacity: the screen-space 3DGS rasterizer culls it by its
+            absolute opacity but blends it with alpha 0, and its backward pass
+            still returns the gradient at alpha 0, which reaches the mask as if the
+            mask scaled alpha. Not supported with ``with_eval3d`` or ``with_ut``.
+            [..., N]. Default is None.
 
     Returns:
         A tuple:
@@ -524,6 +533,13 @@ def rasterization(
 
     """
     has_color = render_mode_has_color(render_mode)
+    if gaussian_masks is not None:
+        if with_eval3d or with_ut:
+            raise ValueError("gaussian_masks needs the screen-space 3DGS rasterizer")
+        # +opacity where kept, -opacity where masked; the opacity gradient is the
+        # mask and the mask gradient is the opacity.
+        masks = gaussian_masks.to(opacities.dtype)
+        opacities = opacities * masks - opacities.detach() * (1 - masks.detach())
 
     external_distortion_coeffs = cast(
         Optional[BivariateWindshieldModelParameters], external_distortion_coeffs
